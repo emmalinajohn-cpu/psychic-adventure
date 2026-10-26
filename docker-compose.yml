@@ -1,0 +1,60 @@
+# Production stack for one Linux server (or split db onto a second server by
+# pointing DATABASE_URL at it). Usage: see DEPLOY.md
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pw
+      POSTGRES_USER: pw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pw -d pw"]
+      interval: 10s
+      retries: 5
+
+  migrate:
+    build: .
+    command: ["npm", "run", "migrate"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pw:${POSTGRES_PASSWORD}@db:5432/pw
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pw:${POSTGRES_PASSWORD}@db:5432/pw
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  collector:
+    build: .
+    restart: unless-stopped
+    command: ["npm", "run", "collector"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pw:${POSTGRES_PASSWORD}@db:5432/pw
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web]
+
+volumes:
+  pgdata:
+  caddy_data:
