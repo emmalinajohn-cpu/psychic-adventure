@@ -213,3 +213,33 @@ export async function sourceStatuses(): Promise<SourceStatus[]> {
     left join lateral (select * from fetch_runs fr where fr.source_id = s.id order by started_at desc limit 1) r on true
     order by s.kind, s.name`;
 }
+
+export interface MapItemRow {
+  id: number;
+  title: string;
+  url: string;
+  at: Date;
+  source_name: string;
+  countries: string[];
+  map_layers: string[];
+  location_name: string | null;
+  priority: Priority;
+  confidence: number;
+  verification_status: string;
+  executive_summary: string;
+  geo_lat: number | null;
+  geo_lon: number | null;
+}
+
+/** Approved items that belong on at least one map layer, newest first. */
+export async function mapItems(days: number): Promise<MapItemRow[]> {
+  return sql<MapItemRow[]>`
+    select i.id, i.title, i.url, coalesce(i.published_at, i.fetched_at) as at, s.name as source_name,
+      a.countries::text[] as countries, a.map_layers, a.location_name, a.priority, a.confidence, a.verification_status,
+      a.executive_summary, i.geo_lat, i.geo_lon
+    from items i join sources s on s.id = i.source_id join item_analysis a on a.item_id = i.id
+    where i.review_status = 'approved' and cardinality(a.map_layers) > 0
+      and coalesce(i.published_at, i.fetched_at) >= now() - make_interval(days => ${days}::int)
+    order by at desc
+    limit 1000`;
+}

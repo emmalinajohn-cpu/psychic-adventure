@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { sql } from "../src/lib/db";
+import { MAP_LAYERS, MAP_LAYER_KEYS } from "../src/lib/layers";
 import { matchCountries } from "../src/lib/match";
 import { ALERT_CATEGORIES, ALERT_CATEGORY_KEYS, priorityFor } from "../src/lib/priority";
 import { COUNTRIES, THEMES, THEME_SLUGS } from "../src/lib/reference";
@@ -22,6 +23,8 @@ export const AnalysisSchema = z.object({
   executive_summary: z.string().describe("One or two plain sentences: what happened"),
   analyst_summary: z.string().describe("Two to four sentences: why it matters for Pacific security, grounded only in the item text"),
   alert_category: z.enum(ALERT_CATEGORY_KEYS),
+  map_layers: z.array(z.enum(MAP_LAYER_KEYS)).describe("Map layers this item belongs on; empty when none fits"),
+  location_name: z.string().nullable().describe("The most specific place the item names (island, town, port, sea area), or null"),
   is_commentary: z.boolean().describe("True for opinion, analysis or commentary rather than reporting of an event"),
 });
 
@@ -34,6 +37,8 @@ Rules:
 - Countries: only Pacific Island Countries and Territories the item is substantially about, from this list: ${COUNTRIES.map((c) => `${c.iso2}=${c.name}`).join(", ")}. Australia, New Zealand, the US, China and others are not on the list; record them as entities instead.
 - Themes: ${THEMES.map((t) => `${t.slug} (${t.name})`).join("; ")}. Transnational crime covers drugs, firearms trafficking, people smuggling, money laundering and organised crime.
 - Alert category: pick the single best fit. ${ALERT_CATEGORY_KEYS.map((k) => `${k} = ${ALERT_CATEGORIES[k].label}`).join("; ")}. Opinion and analysis pieces are "commentary" unless they report a new event.
+- Map layers: ${MAP_LAYER_KEYS.map((k) => `${k} = ${MAP_LAYERS[k].label}`).join("; ")}. Assign a layer only when the item reports such an activity or place; commentary usually has none.
+- Location: copy the most specific place name the item itself gives; never guess one.
 - Write summaries in plain, neutral British English.`;
 
 interface PendingItem {
@@ -91,10 +96,11 @@ export async function processPending(): Promise<{ processed: number; failed: num
       const official = item.source_kind === "regional" || item.source_kind === "government";
       await sql`
         insert into item_analysis (item_id, countries, themes, keywords, entities, executive_summary, analyst_summary,
-          alert_category, priority, is_commentary, confidence, verification_status, model)
+          alert_category, priority, is_commentary, confidence, verification_status, model, map_layers, location_name)
         values (${item.id}, ${countries}, ${[...new Set(a.themes)]}, ${a.keywords.slice(0, 8)}, ${sql.json(a.entities)},
           ${a.executive_summary}, ${a.analyst_summary}, ${a.alert_category}, ${priorityFor(a.alert_category)},
-          ${a.is_commentary}, ${item.base_credibility}, ${official ? "official" : "single_source"}, ${MODEL})
+          ${a.is_commentary}, ${item.base_credibility}, ${official ? "official" : "single_source"}, ${MODEL},
+          ${[...new Set(a.map_layers)]}, ${a.location_name})
         on conflict (item_id) do nothing`;
       await sql`delete from analysis_failures where item_id = ${item.id}`;
       processed++;
