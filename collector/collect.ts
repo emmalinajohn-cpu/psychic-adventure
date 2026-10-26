@@ -47,8 +47,8 @@ export async function collectSource(source: SourceRow): Promise<number> {
       const hash = contentHash(e);
       // Same text already stored from another URL (syndication): skip as a duplicate
       const rows = await sql`
-        insert into items (source_id, url, title, description, author, published_at, content_hash)
-        select ${source.id}, ${e.url}, ${e.title}, ${e.description}, ${e.author}, ${e.publishedAt}, ${hash}
+        insert into items (source_id, url, title, description, author, published_at, content_hash, geo_lat, geo_lon)
+        select ${source.id}, ${e.url}, ${e.title}, ${e.description}, ${e.author}, ${e.publishedAt}, ${hash}, ${e.lat ?? null}, ${e.lon ?? null}
         where not exists (select 1 from items where content_hash = ${hash})
         on conflict (url) do nothing
         returning id`;
