@@ -6,6 +6,9 @@ export interface FeedEntry {
   description: string | null;
   author: string | null;
   publishedAt: Date | null;
+  /** Coordinates the source publishes for the item (GeoRSS / W3C geo), if any */
+  lat?: number;
+  lon?: number;
 }
 
 const parser = new XMLParser({
@@ -51,6 +54,14 @@ function parseDate(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function coordinates(item: Record<string, unknown>): { lat?: number; lon?: number } {
+  const point = text(item["georss:point"]).trim().split(/\s+/).map(Number);
+  let lat = point.length === 2 ? point[0] : Number(text((item["geo:Point"] as Record<string, unknown> | undefined)?.["geo:lat"] ?? item["geo:lat"]));
+  let lon = point.length === 2 ? point[1] : Number(text((item["geo:Point"] as Record<string, unknown> | undefined)?.["geo:long"] ?? item["geo:long"]));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return {};
+  return { lat, lon };
+}
+
 function atomLink(link: unknown): string {
   for (const l of asArray(link as Record<string, string> | Record<string, string>[])) {
     if (typeof l === "string") return l;
@@ -75,6 +86,7 @@ export function parseFeed(xml: string): FeedEntry[] {
         description: description ? description.slice(0, 4000) : null,
         author: text(item["dc:creator"]) || text(item.author) || null,
         publishedAt: parseDate(text(item.pubDate) || text(item["dc:date"])),
+        ...coordinates(item),
       });
     }
   } else if (doc.feed) {

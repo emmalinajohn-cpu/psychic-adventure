@@ -19,6 +19,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/dashboard/review", label: "Review Queue" },
     { href: "/dashboard/feed", label: "Intelligence Feed" },
     { href: "/dashboard/alerts", label: "Alert Centre" },
+    { href: "/dashboard/analyst", label: "AI Analyst" },
+    { href: "/dashboard/crime", label: "Crime Analysis" },
+    { href: "/dashboard/map", label: "Pacific Map" },
+    { href: "/dashboard/risk", label: "Risk Assessment" },
+    { href: "/dashboard/trends", label: "Trend Analysis" },
     { href: "/dashboard/countries", label: "Country Profiles" },
   ];
   return (
